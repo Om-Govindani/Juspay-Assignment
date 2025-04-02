@@ -85,7 +85,7 @@ function Sidebar({ categories: propCategories }) {
         <h2 className="text-3xl bg-white/40 p-2 rounded-lg w-full text-center">
           {selectedCategory}
         </h2>
-        <Droppable droppableId="sidebar" isDropDisabled={true} isCombineEnabled={true} ignoreContainerClipping={false}>
+        <Droppable droppableId="sidebar" isDropDisabled={true} isCombineEnabled={true} ignoreContainerClipping={false} direction="vertical">
           {(provided) => (
             <div 
               className="w-full flex flex-col items-center gap-y-4" 
@@ -100,7 +100,7 @@ function Sidebar({ categories: propCategories }) {
                   console.log("sidebar-"+selectedCategory+"-"+blockIndex)
                   return (
                     <Draggable
-                      key={`sidebar-${selectedCategory}-${blockIndex}`}
+                      key={blockIndex}
                       draggableId={`sidebar-${selectedCategory}-${blockIndex}`}
                       index={blockIndex}
                     >

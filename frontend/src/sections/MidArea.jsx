@@ -47,7 +47,7 @@ function DroppedBlock({ block }) {
 function MidArea({ droppedBlocks }) {
   return (
     <div className="h-full w-full bg-slate-300 rounded-lg p-4 overflow-auto">
-      <Droppable droppableId="midarea" isCombineEnabled={true} isDropDisabled={false} ignoreContainerClipping={false}>
+      <Droppable droppableId="midarea" isCombineEnabled={true} isDropDisabled={false} ignoreContainerClipping={false} direction="vertical">
         {(provided) => (
           <div 
             className="h-full w-full" 

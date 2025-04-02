@@ -47,14 +47,13 @@ function App() {
   const onDragEnd = (result) => {
     const { source, destination, draggableId } = result;
     if (!destination) return;
-    console.log(hello)
     // If dragging from sidebar to midarea, copy the block
     if (source.droppableId === "sidebar" && destination.droppableId === "midarea") {
       // draggableId is in format: "sidebar-<categoryName>-<blockIndex>"
       console.log(draggableId)
       const parts = draggableId.split("-");
       const categoryName = parts[1];
-      const blockIndex = parseInt(parts[2], 10);
+      const blockIndex = parseInt(parts[2],10)
       
       // Find the block from categories list
       const category = categories.find((c) => c.name === categoryName);
