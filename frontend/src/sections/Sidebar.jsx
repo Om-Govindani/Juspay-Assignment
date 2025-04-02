@@ -61,7 +61,7 @@ function Sidebar({ categories: propCategories }) {
   const currentCategory = categories.find((c) => c.name === selectedCategory);
 
   return (
-    <div className="h-full w-full bg-indigo-200 rounded-lg flex flex-row">
+    <div className="h-full w-260 bg-indigo-200 rounded-lg flex flex-row">
       
       <div className="w-1/6 h-full bg-white/40 rounded-lg flex flex-col justify-start gap-y-4 pt-4">
         {categories.map((category) => (

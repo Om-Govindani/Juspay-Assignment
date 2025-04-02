@@ -1,9 +1,10 @@
+// MidArea.jsx - Updated to show blocks for the selected sprite
 import { Droppable, Draggable } from "react-beautiful-dnd";
 import { useState } from "react";
 
 function DroppedBlock({ block, updateBlockInputs, onDelete }) {
   // Local state for input values in the dropped block
-  const [inputs, setInputs] = useState({});
+  const [inputs, setInputs] = useState(block.inputs || {});
   const [isHovered, setIsHovered] = useState(false);
 
   const handleInputChange = (inputIndex, value, inputType) => {
@@ -67,7 +68,7 @@ function DroppedBlock({ block, updateBlockInputs, onDelete }) {
   );
 }
 
-function MidArea({ droppedBlocks, setDroppedBlocks }) {
+function MidArea({ droppedBlocks, setDroppedBlocks, selectedSprite }) {
   const [blockInputs, setBlockInputs] = useState({});
 
   const updateBlockInputs = (blockId, inputs) => {
@@ -102,7 +103,12 @@ function MidArea({ droppedBlocks, setDroppedBlocks }) {
   };
 
   return (
-    <div className="h-full w-full bg-slate-300 rounded-lg p-4 overflow-auto">
+    <div className="h-full w-240 bg-slate-300 rounded-lg p-4 overflow-auto flex flex-col">
+      {/* Display selected sprite name */}
+      <h2 className="text-3xl w-full text-center mb-4 bg-white/60 p-2 rounded-md inline-block">
+        {selectedSprite ? `${selectedSprite.name} Blocks` : 'No Sprite Selected'}
+      </h2>
+      
       <Droppable droppableId="midarea" isCombineEnabled={true} isDropDisabled={false} ignoreContainerClipping={false} direction="vertical">
         {(provided) => (
           <div 

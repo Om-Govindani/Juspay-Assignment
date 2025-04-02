@@ -1,100 +1,109 @@
+// Playground.jsx - Updated with improved sprite dragging
 import React, { useState, useEffect, useRef } from "react";
-import CatSprite from "../components/Avatars/CatSprite";
+import CatSprite from "../assets/cat.svg";
 
-function Playground({ droppedBlocks, isPlaying, onPlay }) {
+function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }) {
   const playgroundRef = useRef(null);
-  const [catPosition, setCatPosition] = useState({ x: 0, y: 0 });
+  
+  // State for sprite positions, rotations, messages, etc.
+  const [spriteStates, setSpriteStates] = useState({});
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [message, setMessage] = useState("");
-  const [rotation, setRotation] = useState(0);
-  const [blockStates, setBlockStates] = useState({});
-
+  const [draggedSprite, setDraggedSprite] = useState(null);
+  
   // Get playground dimensions for centering
   const [playgroundDimensions, setPlaygroundDimensions] = useState({ width: 0, height: 0 });
   
+  // Initialize sprite positions when sprites change
   useEffect(() => {
     if (playgroundRef.current) {
       const { clientWidth, clientHeight } = playgroundRef.current;
       setPlaygroundDimensions({ width: clientWidth, height: clientHeight });
-      // Set initial position to center of playground
-      setCatPosition({ 
-        x: clientWidth / 2 - 15, // 15 is half the width of the cat sprite
-        y: clientHeight / 2 - 15 // 15 is half the height of the cat sprite
+      
+      // Initialize positions for any new sprites
+      sprites.forEach(sprite => {
+        if (!spriteStates[sprite.id]) {
+          setSpriteStates(prev => ({
+            ...prev,
+            [sprite.id]: {
+              position: { 
+                x: clientWidth / 2 - 30, // 30 is half the width of the sprite
+                y: clientHeight / 2 - 30 // 30 is half the height of the sprite
+              },
+              rotation: 0,
+              message: "",
+              isVisible: true
+            }
+          }));
+        }
       });
     }
-  }, []);
+  }, [sprites, playgroundRef]);
 
-  // Handle cat dragging
-  const handleMouseDown = (e) => {
+  // Handle sprite dragging - significantly improved
+  const handleMouseDown = (e, sprite) => {
     if (isPlaying) return; // Prevent dragging during execution
+    
+    e.stopPropagation(); // Prevent event propagation
     setIsDragging(true);
-    const rect = e.target.getBoundingClientRect();
-    setDragOffset({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
+    setDraggedSprite(sprite);
     
-    const playground = playgroundRef.current;
-    const rect = playground.getBoundingClientRect();
+    // Store the initial mouse position
+    const initialMouseX = e.clientX;
+    const initialMouseY = e.clientY;
     
-    // Calculate new position within the playground boundaries
-    let newX = e.clientX - rect.left - dragOffset.x;
-    let newY = e.clientY - rect.top - dragOffset.y;
+    // Store the initial sprite position
+    const initialSpritePos = { ...spriteStates[sprite.id].position };
     
-    // Ensure the cat stays within the playground
-    newX = Math.max(0, Math.min(newX, rect.width - 30));
-    newY = Math.max(0, Math.min(newY, rect.height - 30));
-    
-    setCatPosition({ x: newX, y: newY });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  // Reset cat position if dragged outside
-  useEffect(() => {
-    const handleGlobalMouseUp = (e) => {
-      if (!isDragging) return;
+    // Create mouse move handler for dragging
+    const handleMouseMove = (moveEvent) => {
+      // Calculate the delta from initial mouse position
+      const deltaX = moveEvent.clientX - initialMouseX;
+      const deltaY = moveEvent.clientY - initialMouseY;
       
+      // Calculate new position
+      let newX = initialSpritePos.x + deltaX;
+      let newY = initialSpritePos.y + deltaY;
+      
+      // Ensure the sprite stays within the playground
       const playground = playgroundRef.current;
-      if (!playground) return;
-      
-      const rect = playground.getBoundingClientRect();
-      
-      // Check if mouse is outside playground
-      if (
-        e.clientX < rect.left || 
-        e.clientX > rect.right || 
-        e.clientY < rect.top || 
-        e.clientY > rect.bottom
-      ) {
-        // Reset to center
-        setCatPosition({ 
-          x: playgroundDimensions.width / 2 - 15,
-          y: playgroundDimensions.height / 2 - 15
-        });
+      if (playground) {
+        const { clientWidth, clientHeight } = playground;
+        newX = Math.max(0, Math.min(newX, clientWidth - 60));
+        newY = Math.max(0, Math.min(newY, clientHeight - 60));
       }
       
-      setIsDragging(false);
+      // Update the position for the specific sprite
+      setSpriteStates(prev => ({
+        ...prev,
+        [sprite.id]: {
+          ...prev[sprite.id],
+          position: { x: newX, y: newY }
+        }
+      }));
     };
     
-    document.addEventListener("mouseup", handleGlobalMouseUp);
-    return () => document.removeEventListener("mouseup", handleGlobalMouseUp);
-  }, [isDragging, playgroundDimensions]);
+    // Create mouse up handler to stop dragging
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setDraggedSprite(null);
+      
+      // Remove event listeners when done dragging
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    // Add global event listeners
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Convert screen coordinates to Scratch coordinate system (0,0 at center)
   const toScratchCoords = (screenX, screenY) => {
     const centerX = playgroundDimensions.width / 2;
     const centerY = playgroundDimensions.height / 2;
     return {
-      x: screenX - centerX,
-      y: -(screenY - centerY) // Y is inverted in screen coordinates
+      x: Math.round(screenX - centerX),
+      y: Math.round(-(screenY - centerY)) // Y is inverted in screen coordinates
     };
   };
 
@@ -108,173 +117,256 @@ function Playground({ droppedBlocks, isPlaying, onPlay }) {
     };
   };
   
+  // Execute blocks when isPlaying changes
   useEffect(() => {
     if (!isPlaying) return;
 
-    // Reset message and collect inputs before execution
-    setMessage("");
-    let executionStates = {};
-    
-    droppedBlocks.forEach(block => {
-      // Get input values from the block
-      const blockInputs = {};
-      if (block.inputTypes && block.inputTypes.length > 0) {
-        // Find the block element and get its inputs
-        const blockElement = document.getElementById(block.id);
-        if (blockElement) {
-          const inputElements = blockElement.querySelectorAll('input');
-          block.inputTypes.forEach((type, index) => {
-            const input = inputElements[index];
-            blockInputs[index] = input ? input.value || "0" : "0";
-          });
-        }
-      }
-      executionStates[block.id] = blockInputs;
-    });
-    
-    setBlockStates(executionStates);
-
-    const executeBlocks = async () => {
-      for (const block of droppedBlocks) {
-        const blockInputs = blockStates[block.id] || {};
-        
-        if (block.category === "Motion") {
-          if (block.text.includes("Move ___ steps")) {
-            // Get steps from input or default to 10
-            const steps = parseFloat(blockInputs[0] || "10");
-            
-            // Move in the direction of rotation
-            const radians = rotation * Math.PI / 180;
-            setCatPosition(prev => {
-              // Calculate new position
-              const newX = prev.x + Math.cos(radians) * steps;
-              const newY = prev.y - Math.sin(radians) * steps; // Y is inverted in screen coordinates
-              
-              // Ensure the cat stays within playground boundaries
-              return {
-                x: Math.max(0, Math.min(newX, playgroundDimensions.width - 30)),
-                y: Math.max(0, Math.min(newY, playgroundDimensions.height - 30))
-              };
-            });
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          else if (block.text.includes("Turn ___ degree")) {
-            // Get degree from input or default to 90
-            const degrees = parseFloat(blockInputs[0] || "90");
-            setRotation(prev => prev + degrees);
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          else if (block.text.includes("Go to x:")) {
-            // Get x,y coordinates from inputs or default to 0,0
-            const scratchX = parseFloat(blockInputs[0] || "0");
-            const scratchY = parseFloat(blockInputs[1] || "0");
-            
-            // Convert to screen coordinates (origin at center)
-            const screenCoords = toScreenCoords(scratchX, scratchY);
-            
-            setCatPosition({
-              x: screenCoords.x - 15, // Adjust for sprite center
-              y: screenCoords.y - 15  // Adjust for sprite center
-            });
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-        else if (block.category === "Looks") {
-          if (block.text.includes("Say ___")) {
-            // Get message and duration
-            let message = "Hello!";
-            let duration = 2;
-            
-            if (block.text.includes("for ___ sec")) {
-              message = blockInputs[0] || "Hello!";
-              duration = parseFloat(blockInputs[1] || "2");
-            }
-            
-            setMessage(message);
-            await new Promise(resolve => setTimeout(resolve, duration * 1000));
-            setMessage("");
-          }
-        }
-        else if (block.category === "Control") {
-          if (block.text.includes("Repeat ___ times")) {
-            const times = parseInt(blockInputs[0] || "10", 10);
-            
-            // Find index of this block and next block
-            const blockIndex = droppedBlocks.findIndex(b => b.id === block.id);
-            const nextBlock = droppedBlocks[blockIndex + 1];
-            
-            if (nextBlock) {
-              for (let i = 0; i < times; i++) {
-                // Execute only the next block repeatedly
-                // Execute according to its category (simplified for demo)
-                if (nextBlock.category === "Motion") {
-                  if (nextBlock.text.includes("Move ___ steps")) {
-                    const nextBlockInputs = blockStates[nextBlock.id] || {};
-                    const steps = parseFloat(nextBlockInputs[0] || "10");
-                    const radians = rotation * Math.PI / 180;
-                    setCatPosition(prev => {
-                      const newX = prev.x + Math.cos(radians) * steps;
-                      const newY = prev.y - Math.sin(radians) * steps;
-                      return {
-                        x: Math.max(0, Math.min(newX, playgroundDimensions.width - 30)),
-                        y: Math.max(0, Math.min(newY, playgroundDimensions.height - 30))
-                      };
-                    });
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                  }
-                  else if (nextBlock.text.includes("Turn ___ degree")) {
-                    const nextBlockInputs = blockStates[nextBlock.id] || {};
-                    const degrees = parseFloat(nextBlockInputs[0] || "90");
-                    setRotation(prev => prev + degrees);
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                  }
-                }
-              }
-            }
-          }
-        }
+    // Execute blocks for each sprite
+    const executeSprites = async () => {
+      // Process each sprite one by one
+      for (const sprite of sprites) {
+        const blocks = spriteBlocks[sprite.id] || [];
+        await executeBlocksForSprite(sprite, blocks);
       }
     };
 
-    executeBlocks();
-  }, [isPlaying, droppedBlocks, rotation, playgroundDimensions, blockStates]);
+    executeSprites();
+  }, [isPlaying, sprites, spriteBlocks]);
 
-  // Convert current position to Scratch coordinates for display
-  const scratchPosition = toScratchCoords(catPosition.x + 15, catPosition.y + 15);
+  // Function to execute blocks for a specific sprite
+  const executeBlocksForSprite = async (sprite, blocks) => {
+    // Reset messages before execution
+    setSpriteStates(prev => ({
+      ...prev,
+      [sprite.id]: {
+        ...prev[sprite.id],
+        message: ""
+      }
+    }));
+    
+    // Filter blocks with "When ▶️ clicked" as first block
+    const eventBlock = blocks.find(block => block.category === "Event" && block.text.includes("When ▶️ clicked"));
+    if (!eventBlock) return; // Don't execute if no event block
+    
+    // Execute the remaining blocks
+    for (const block of blocks) {
+      if (block.id === eventBlock.id) continue; // Skip the event block
+      
+      // Based on the category, execute different actions
+      if (block.category === "Motion") {
+        await executeMotionBlock(sprite, block);
+      } 
+      else if (block.category === "Looks") {
+        await executeLooksBlock(sprite, block);
+      }
+      else if (block.category === "Control") {
+        await executeControlBlock(sprite, block, blocks);
+      }
+    }
+  };
+
+  // Execute motion blocks
+  const executeMotionBlock = async (sprite, block) => {
+    const inputs = block.inputs || {};
+    
+    if (block.text.includes("Move ___ steps")) {
+      // Get steps from input or default to 10
+      const steps = parseFloat(inputs[0] || "10");
+      
+      // Move in the direction of rotation
+      const spriteState = spriteStates[sprite.id];
+      if (!spriteState) return;
+      
+      const radians = spriteState.rotation * Math.PI / 180;
+      
+      setSpriteStates(prev => {
+        const currentState = prev[sprite.id];
+        const currentPosition = currentState.position;
+        
+        // Calculate new position
+        const newX = currentPosition.x + Math.cos(radians) * steps;
+        const newY = currentPosition.y - Math.sin(radians) * steps; // Y is inverted in screen coordinates
+        
+        // Ensure the sprite stays within playground boundaries
+        return {
+          ...prev,
+          [sprite.id]: {
+            ...currentState,
+            position: {
+              x: Math.max(0, Math.min(newX, playgroundDimensions.width - 60)),
+              y: Math.max(0, Math.min(newY, playgroundDimensions.height - 60))
+            }
+          }
+        };
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    else if (block.text.includes("Turn ___ degree")) {
+      // Get degree from input or default to 90
+      const degrees = parseFloat(inputs[0] || "90");
+      
+      setSpriteStates(prev => {
+        const currentState = prev[sprite.id];
+        return {
+          ...prev,
+          [sprite.id]: {
+            ...currentState,
+            rotation: currentState.rotation + degrees
+          }
+        };
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    else if (block.text.includes("Go to x:")) {
+      // Get x,y coordinates from inputs or default to 0,0
+      const scratchX = parseFloat(inputs[0] || "0");
+      const scratchY = parseFloat(inputs[1] || "0");
+      
+      // Convert to screen coordinates (origin at center)
+      const screenCoords = toScreenCoords(scratchX, scratchY);
+      
+      setSpriteStates(prev => {
+        const currentState = prev[sprite.id];
+        return {
+          ...prev,
+          [sprite.id]: {
+            ...currentState,
+            position: {
+              x: screenCoords.x - 30, // Adjust for sprite center
+              y: screenCoords.y - 30  // Adjust for sprite center
+            }
+          }
+        };
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  };
+
+  // Execute looks blocks
+  const executeLooksBlock = async (sprite, block) => {
+    const inputs = block.inputs || {};
+    
+    if (block.text.includes("Say ___")) {
+      // Get message and duration
+      let message = "Hello!";
+      let duration = 2;
+      
+      if (block.text.includes("for ___ sec")) {
+        message = inputs[0] || "Hello!";
+        duration = parseFloat(inputs[1] || "2");
+      }
+      
+      setSpriteStates(prev => ({
+        ...prev,
+        [sprite.id]: {
+          ...prev[sprite.id],
+          message: message
+        }
+      }));
+      
+      await new Promise(resolve => setTimeout(resolve, duration * 1000));
+      
+      setSpriteStates(prev => ({
+        ...prev,
+        [sprite.id]: {
+          ...prev[sprite.id],
+          message: ""
+        }
+      }));
+    }
+  };
+
+  // Execute control blocks
+  const executeControlBlock = async (sprite, block, allBlocks) => {
+    const inputs = block.inputs || {};
+    
+    if (block.text.includes("Repeat ___ times")) {
+      const times = parseInt(inputs[0] || "10", 10);
+      
+      // Find index of this block and next block
+      const blockIndex = allBlocks.findIndex(b => b.id === block.id);
+      const nextBlock = allBlocks[blockIndex + 1];
+      
+      if (nextBlock) {
+        for (let i = 0; i < times; i++) {
+          // Execute only the next block repeatedly
+          if (nextBlock.category === "Motion") {
+            await executeMotionBlock(sprite, nextBlock);
+          } 
+          else if (nextBlock.category === "Looks") {
+            await executeLooksBlock(sprite, nextBlock);
+          }
+        }
+      }
+    }
+  };
 
   return (
     <div 
       ref={playgroundRef}
       className="h-full w-full bg-white border-2 border-gray-300 rounded-lg relative"
-      onMouseMove={handleMouseMove}
     >
-      {/* Add coordinate display for debugging */}
+      {/* Coordinate Display */}
       <div className="absolute top-2 left-2 text-xs bg-white/75 p-1 rounded">
-        x: {Math.round(scratchPosition.x)}, y: {Math.round(scratchPosition.y)}
-      </div>
-      
-      <div
-        className="absolute cursor-grab active:cursor-grabbing"
-        style={{
-          left: `${catPosition.x}px`,
-          top: `${catPosition.y}px`,
-          transform: `rotate(${rotation}deg)`,
-          width: "30px",
-          height: "30px",
-          zIndex: 10
-        }}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onClick={onPlay}
-      >
-        <CatSprite />
-
-        {message && (
-          <div className="absolute top-0 right-0 transform translate-x-full -translate-y-full bg-white p-2 rounded-lg border border-gray-300 whitespace-nowrap z-20">
-            {message}
-          </div>
+        {selectedSprite && spriteStates[selectedSprite.id] && (
+          <>
+            Selected: {selectedSprite.name} | 
+            x: {toScratchCoords(
+              spriteStates[selectedSprite.id].position.x + 30, 
+              spriteStates[selectedSprite.id].position.y + 30
+            ).x}, 
+            y: {toScratchCoords(
+              spriteStates[selectedSprite.id].position.x + 30, 
+              spriteStates[selectedSprite.id].position.y + 30
+            ).y}
+          </>
         )}
       </div>
+      
+      {/* Render all sprites */}
+      {sprites.map(sprite => {
+        const spriteState = spriteStates[sprite.id];
+        if (!spriteState) return null;
+        
+        return (
+          <div
+            key={sprite.id}
+            className="absolute cursor-grab active:cursor-grabbing"
+            style={{
+              left: `${spriteState.position.x}px`,
+              top: `${spriteState.position.y}px`,
+              transform: `rotate(${spriteState.rotation}deg)`,
+              width: "70px",
+              height: "70px",
+              zIndex: 10,
+              display: spriteState.isVisible ? 'block' : 'none',
+              // Highlight selected sprite
+              
+              transition: isDragging && draggedSprite?.id === sprite.id ? 'none' : 'all 0.1s ease',
+            }}
+            onMouseDown={(e) => handleMouseDown(e, sprite)}
+            onClick={() => selectedSprite?.id === sprite.id && onPlay()}
+          >
+            {/* Render sprite image */}
+            <img 
+              src={sprite.src} 
+              alt={sprite.name}
+              className="w-full h-full object-contain pointer-events-none"
+              draggable="false"
+            />
+
+            {/* Speech bubble for messages */}
+            {spriteState.message && (
+              <div className="absolute top-0 right-0 transform translate-x-full -translate-y-full bg-white p-2 rounded-lg border border-gray-300 whitespace-nowrap z-20">
+                {spriteState.message}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
