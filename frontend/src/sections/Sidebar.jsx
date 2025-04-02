@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Droppable, Draggable } from "react-beautiful-dnd";
 
 function Sidebar({ categories: propCategories }) {
-  // Use categories passed via props; fallback to default if needed.
+  
   const defaultCategories = [
     { 
       name: "Motion", 
@@ -57,12 +57,12 @@ function Sidebar({ categories: propCategories }) {
     }));
   };
 
-  // Get the current category object
+  
   const currentCategory = categories.find((c) => c.name === selectedCategory);
 
   return (
     <div className="h-full w-full bg-indigo-200 rounded-lg flex flex-row">
-      {/* Left Section - Category Buttons */}
+      
       <div className="w-1/6 h-full bg-white/40 rounded-lg flex flex-col justify-start gap-y-4 pt-4">
         {categories.map((category) => (
           <div
@@ -71,7 +71,7 @@ function Sidebar({ categories: propCategories }) {
             onClick={() => {
               setSelectedCategory(category.name);
               setSelectedColor(category.color);
-              setInputs({}); // Clear inputs when changing category
+              setInputs({});
             }}
           >
             <div className={`w-8 h-8 m-0.5 ${category.color} rounded-full`}></div>
@@ -80,7 +80,7 @@ function Sidebar({ categories: propCategories }) {
         ))}
       </div>
 
-      {/* Right Section - Display Selected Category Content as Draggable blocks */}
+      
       <div className="w-5/6 h-full flex flex-col items-center p-4 gap-y-4">
         <h2 className="text-3xl bg-white/40 p-2 rounded-lg w-full text-center">
           {selectedCategory}
