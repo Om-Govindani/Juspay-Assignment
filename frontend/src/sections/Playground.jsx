@@ -143,6 +143,10 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
         message: ""
       }
     }));
+
+    let tmpSpriteState = {
+        ...spriteStates[sprite.id]
+    }
     
     // Filter blocks with "When ▶️ clicked" as first block
     const eventBlock = blocks.find(block => block.category === "Event" && block.text.includes("When ▶️ clicked"));
@@ -154,19 +158,19 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
       
       // Based on the category, execute different actions
       if (block.category === "Motion") {
-        await executeMotionBlock(sprite, block);
+        await executeMotionBlock(sprite, block, tmpSpriteState);
       } 
       else if (block.category === "Looks") {
-        await executeLooksBlock(sprite, block);
+        await executeLooksBlock(sprite, block, tmpSpriteState);
       }
       else if (block.category === "Control") {
-        await executeControlBlock(sprite, block, blocks);
+        await executeControlBlock(sprite, block, blocks, tmpSpriteState);
       }
     }
   };
 
   // Execute motion blocks
-  const executeMotionBlock = async (sprite, block) => {
+  const executeMotionBlock = async (sprite, block, spriteState) => {
     const inputs = block.inputs || {};
     
     if (block.text.includes("Move ___ steps")) {
@@ -174,10 +178,12 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
       const steps = parseFloat(inputs[0] || "10");
       
       // Move in the direction of rotation
-      const spriteState = spriteStates[sprite.id];
+      // const spriteState = spriteStates[sprite.id];
+      console.log("heera spriteState", spriteState)
       if (!spriteState) return;
       
       const radians = spriteState.rotation * Math.PI / 180;
+      console.log("heera", radians)
       
       setSpriteStates(prev => {
         const currentState = prev[sprite.id];
@@ -185,9 +191,11 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
         
         // Calculate new position
         const newX = currentPosition.x + Math.cos(radians) * steps;
-        const newY = currentPosition.y - Math.sin(radians) * steps; // Y is inverted in screen coordinates
+        const newY = currentPosition.y + Math.sin(radians) * steps; // Y is inverted in screen coordinates
+        console.log("heera", newX, newY)
         
         // Ensure the sprite stays within playground boundaries
+        
         return {
           ...prev,
           [sprite.id]: {
@@ -205,9 +213,9 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
     else if (block.text.includes("Turn ___ degree")) {
       // Get degree from input or default to 90
       const degrees = parseFloat(inputs[0] || "90");
-      
+      spriteState.rotation += degrees;
       setSpriteStates(prev => {
-        const currentState = prev[sprite.id];
+        const currentState = prev[sprite.id]; 
         return {
           ...prev,
           [sprite.id]: {
