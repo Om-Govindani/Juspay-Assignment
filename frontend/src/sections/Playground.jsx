@@ -1,6 +1,5 @@
-// Playground.jsx - Updated with improved sprite dragging
+// Playground.jsx - Updated with fixed repeat block and concurrent sprite execution
 import React, { useState, useEffect, useRef } from "react";
-import CatSprite from "../assets/cat.svg";
 
 function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }) {
   const playgroundRef = useRef(null);
@@ -121,13 +120,16 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
   useEffect(() => {
     if (!isPlaying) return;
 
-    // Execute blocks for each sprite
+    // Execute blocks for each sprite concurrently
     const executeSprites = async () => {
-      // Process each sprite one by one
-      for (const sprite of sprites) {
+      // Create an array of promises to execute all sprites concurrently
+      const spritePromises = sprites.map(sprite => {
         const blocks = spriteBlocks[sprite.id] || [];
-        await executeBlocksForSprite(sprite, blocks);
-      }
+        return executeBlocksForSprite(sprite, blocks);
+      });
+      
+      // Wait for all sprites to finish their execution
+      await Promise.all(spritePromises);
     };
 
     executeSprites();
@@ -144,58 +146,86 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
       }
     }));
 
-    let tmpSpriteState = {
-        ...spriteStates[sprite.id]
-    }
-    
     // Filter blocks with "When ▶️ clicked" as first block
     const eventBlock = blocks.find(block => block.category === "Event" && block.text.includes("When ▶️ clicked"));
     if (!eventBlock) return; // Don't execute if no event block
     
-    // Execute the remaining blocks
-    for (const block of blocks) {
-      if (block.id === eventBlock.id) continue; // Skip the event block
+    // Process blocks in order, handling control flow properly
+    await processBlocks(sprite, blocks, 0);
+  };
+
+  // Process blocks recursively, handling control flow properly
+  const processBlocks = async (sprite, blocks, startIndex) => {
+    for (let i = startIndex; i < blocks.length; i++) {
+      const block = blocks[i];
       
-      // Based on the category, execute different actions
+      // Skip the event block
+      if (block.category === "Event" && block.text.includes("When ▶️ clicked")) {
+        continue;
+      }
+      
+      // Execute based on category
       if (block.category === "Motion") {
-        await executeMotionBlock(sprite, block, tmpSpriteState);
+        await executeMotionBlock(sprite, block);
       } 
       else if (block.category === "Looks") {
-        await executeLooksBlock(sprite, block, tmpSpriteState);
+        await executeLooksBlock(sprite, block);
       }
       else if (block.category === "Control") {
-        await executeControlBlock(sprite, block, blocks, tmpSpriteState);
+        if (block.text.includes("Repeat ___ times")) {
+          const inputs = block.inputs || {};
+          const times = parseInt(inputs[0] || "10", 10);
+          
+          // Find the blocks inside the repeat block
+          // In a real implementation, blocks would have parent-child relationships
+          // As a simplification, we'll take the next block after the repeat block
+          const repeatBlockIndex = i;
+          let nextBlockIndex = repeatBlockIndex + 1;
+          
+          // Execute the blocks inside the repeat block multiple times
+          for (let j = 0; j < times; j++) {
+            // Process the next block (and potentially its children)
+            if (nextBlockIndex < blocks.length) {
+              // Execute just the next block in the sequence for the repeat
+              const nextBlock = blocks[nextBlockIndex];
+              
+              if (nextBlock.category === "Motion") {
+                await executeMotionBlock(sprite, nextBlock);
+              } 
+              else if (nextBlock.category === "Looks") {
+                await executeLooksBlock(sprite, nextBlock);
+              }
+            }
+          }
+          
+          // Skip the next block since we already executed it
+          i = nextBlockIndex;
+        }
       }
     }
   };
 
   // Execute motion blocks
-  const executeMotionBlock = async (sprite, block, spriteState) => {
+  const executeMotionBlock = async (sprite, block) => {
     const inputs = block.inputs || {};
     
     if (block.text.includes("Move ___ steps")) {
       // Get steps from input or default to 10
       const steps = parseFloat(inputs[0] || "10");
       
-      // Move in the direction of rotation
-      // const spriteState = spriteStates[sprite.id];
-      console.log("heera spriteState", spriteState)
-      if (!spriteState) return;
-      
-      const radians = spriteState.rotation * Math.PI / 180;
-      console.log("heera", radians)
-      
+      // Update state using a function to ensure we have the most current state
       setSpriteStates(prev => {
         const currentState = prev[sprite.id];
+        if (!currentState) return prev;
+        
+        const radians = currentState.rotation * Math.PI / 180;
         const currentPosition = currentState.position;
         
         // Calculate new position
         const newX = currentPosition.x + Math.cos(radians) * steps;
         const newY = currentPosition.y + Math.sin(radians) * steps; // Y is inverted in screen coordinates
-        console.log("heera", newX, newY)
         
         // Ensure the sprite stays within playground boundaries
-        
         return {
           ...prev,
           [sprite.id]: {
@@ -213,9 +243,11 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
     else if (block.text.includes("Turn ___ degree")) {
       // Get degree from input or default to 90
       const degrees = parseFloat(inputs[0] || "90");
-      spriteState.rotation += degrees;
+      
       setSpriteStates(prev => {
-        const currentState = prev[sprite.id]; 
+        const currentState = prev[sprite.id];
+        if (!currentState) return prev;
+        
         return {
           ...prev,
           [sprite.id]: {
@@ -237,6 +269,8 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
       
       setSpriteStates(prev => {
         const currentState = prev[sprite.id];
+        if (!currentState) return prev;
+        
         return {
           ...prev,
           [sprite.id]: {
@@ -284,31 +318,6 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
           message: ""
         }
       }));
-    }
-  };
-
-  // Execute control blocks
-  const executeControlBlock = async (sprite, block, allBlocks) => {
-    const inputs = block.inputs || {};
-    
-    if (block.text.includes("Repeat ___ times")) {
-      const times = parseInt(inputs[0] || "10", 10);
-      
-      // Find index of this block and next block
-      const blockIndex = allBlocks.findIndex(b => b.id === block.id);
-      const nextBlock = allBlocks[blockIndex + 1];
-      
-      if (nextBlock) {
-        for (let i = 0; i < times; i++) {
-          // Execute only the next block repeatedly
-          if (nextBlock.category === "Motion") {
-            await executeMotionBlock(sprite, nextBlock);
-          } 
-          else if (nextBlock.category === "Looks") {
-            await executeLooksBlock(sprite, nextBlock);
-          }
-        }
-      }
     }
   };
 
