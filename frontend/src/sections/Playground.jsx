@@ -189,7 +189,6 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay, 
                   collisionOccurred = true;
                   // Mark this pair in cooldown.
                   collisionCooldownRef.current[pairKey] = now;
-                  console.log(`Collision: Swapping steps between ${spriteA.name} and ${spriteB.name}`);
                 }
               } else if (moveIndexA >= 0 && moveIndexB < 0) {
                 // Sprite A is moving, Sprite B is stationary: transfer movement from A to B.
@@ -206,7 +205,6 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay, 
                   });
                   collisionOccurred = true;
                   collisionCooldownRef.current[pairKey] = now;
-                  console.log(`Collision: Transferring steps from ${spriteA.name} to ${spriteB.name}`);
                 }
               } else if (moveIndexA < 0 && moveIndexB >= 0) {
                 // Sprite B is moving, Sprite A is stationary: transfer movement from B to A.
@@ -223,7 +221,6 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay, 
                   });
                   collisionOccurred = true;
                   collisionCooldownRef.current[pairKey] = now;
-                  console.log(`Collision: Transferring steps from ${spriteB.name} to ${spriteA.name}`);
                 }
               }
             }
