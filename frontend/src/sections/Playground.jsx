@@ -1,69 +1,70 @@
-// Playground.jsx - Updated with fixed repeat block and concurrent sprite execution
+// Playground.jsx - Updated collision handling with cooldown and updated block processing
 import React, { useState, useEffect, useRef } from "react";
 
-function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }) {
+function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay, setSpriteBlocks }) {
   const playgroundRef = useRef(null);
   
-  // State for sprite positions, rotations, messages, etc.
+  // Sprite states and dimensions
   const [spriteStates, setSpriteStates] = useState({});
   const [isDragging, setIsDragging] = useState(false);
   const [draggedSprite, setDraggedSprite] = useState(null);
-  
-  // Get playground dimensions for centering
   const [playgroundDimensions, setPlaygroundDimensions] = useState({ width: 0, height: 0 });
   
-  // Initialize sprite positions when sprites change
+  // Ref to store latest spriteBlocks for block processing
+  const blocksRef = useRef(spriteBlocks);
+  useEffect(() => {
+    blocksRef.current = spriteBlocks;
+  }, [spriteBlocks]);
+  
+  // Collision cooldown: store last collision time for a pair as "spriteA-spriteB"
+  const collisionCooldownRef = useRef({});
+  const COLLISION_COOLDOWN = 500; // in milliseconds
+  
+  // Flag to avoid overlapping collision updates
+  const isUpdatingCollision = useRef(false);
+  // Collision check interval ref
+  const collisionIntervalId = useRef(null);
+  
+  // Initialize sprite positions
   useEffect(() => {
     if (playgroundRef.current) {
       const { clientWidth, clientHeight } = playgroundRef.current;
       setPlaygroundDimensions({ width: clientWidth, height: clientHeight });
       
-      // Initialize positions for any new sprites
       sprites.forEach(sprite => {
         if (!spriteStates[sprite.id]) {
           setSpriteStates(prev => ({
             ...prev,
             [sprite.id]: {
-              position: { 
-                x: clientWidth / 2 - 30, // 30 is half the width of the sprite
-                y: clientHeight / 2 - 30 // 30 is half the height of the sprite
-              },
+              position: { x: clientWidth / 2 - 30, y: clientHeight / 2 - 30 },
               rotation: 0,
               message: "",
-              isVisible: true
+              isVisible: true,
+              step: 10,
             }
           }));
         }
       });
     }
   }, [sprites, playgroundRef]);
-
-  // Handle sprite dragging - significantly improved
+  
+  // Handle dragging (unchanged)
   const handleMouseDown = (e, sprite) => {
-    if (isPlaying) return; // Prevent dragging during execution
-    
-    e.stopPropagation(); // Prevent event propagation
+    if (isPlaying) return;
+    e.stopPropagation();
     setIsDragging(true);
     setDraggedSprite(sprite);
     
-    // Store the initial mouse position
     const initialMouseX = e.clientX;
     const initialMouseY = e.clientY;
-    
-    // Store the initial sprite position
     const initialSpritePos = { ...spriteStates[sprite.id].position };
     
-    // Create mouse move handler for dragging
     const handleMouseMove = (moveEvent) => {
-      // Calculate the delta from initial mouse position
       const deltaX = moveEvent.clientX - initialMouseX;
       const deltaY = moveEvent.clientY - initialMouseY;
-      
-      // Calculate new position
       let newX = initialSpritePos.x + deltaX;
       let newY = initialSpritePos.y + deltaY;
       
-      // Ensure the sprite stays within the playground
       const playground = playgroundRef.current;
       if (playground) {
         const { clientWidth, clientHeight } = playground;
@@ -71,7 +72,6 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
         newY = Math.max(0, Math.min(newY, clientHeight - 60));
       }
       
-      // Update the position for the specific sprite
       setSpriteStates(prev => ({
         ...prev,
         [sprite.id]: {
@@ -81,207 +81,222 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
       }));
     };
     
-    // Create mouse up handler to stop dragging
     const handleMouseUp = () => {
       setIsDragging(false);
       setDraggedSprite(null);
-      
-      // Remove event listeners when done dragging
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
     
-    // Add global event listeners
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   };
-
-  // Convert screen coordinates to Scratch coordinate system (0,0 at center)
+  
+  // Coordinate conversion functions
   const toScratchCoords = (screenX, screenY) => {
     const centerX = playgroundDimensions.width / 2;
     const centerY = playgroundDimensions.height / 2;
-    return {
-      x: Math.round(screenX - centerX),
-      y: Math.round(-(screenY - centerY)) // Y is inverted in screen coordinates
-    };
+    return { x: Math.round(screenX - centerX), y: Math.round(-(screenY - centerY)) };
   };
-
-  // Convert Scratch coordinates to screen coordinates
+  
   const toScreenCoords = (scratchX, scratchY) => {
     const centerX = playgroundDimensions.width / 2;
     const centerY = playgroundDimensions.height / 2;
-    return {
-      x: scratchX + centerX,
-      y: centerY - scratchY // Y is inverted in screen coordinates
-    };
+    return { x: scratchX + centerX, y: centerY - scratchY };
   };
   
-
   useEffect(() => {
     if (!playgroundRef.current) return;
-
     const { clientWidth, clientHeight } = playgroundRef.current;
     setPlaygroundDimensions({ width: clientWidth, height: clientHeight });
-
-    setSpriteStates((prev) => {
+    setSpriteStates(prev => {
       const newState = { ...prev };
-      sprites.forEach((sprite) => {
+      sprites.forEach(sprite => {
         if (!newState[sprite.id]) {
           newState[sprite.id] = {
             position: { x: clientWidth / 2 - 30, y: clientHeight / 2 - 30 },
             rotation: 0,
             message: "",
             isVisible: true,
-            step: sprite.step || 10,
+            step: 10,
           };
         }
       });
       return newState;
     });
   }, [sprites, playgroundRef.current]);
-
-  // Check collision and swap steps
+  
+  // Set up continuous collision checking only during execution
+  useEffect(() => {
+    if (isPlaying) {
+      collisionIntervalId.current = setInterval(checkCollisionAndSwapSteps, 50);
+    } else {
+      if (collisionIntervalId.current) {
+        clearInterval(collisionIntervalId.current);
+        collisionIntervalId.current = null;
+      }
+      // Clear collision cooldown when not playing
+      collisionCooldownRef.current = {};
+    }
+    return () => {
+      if (collisionIntervalId.current) {
+        clearInterval(collisionIntervalId.current);
+        collisionIntervalId.current = null;
+      }
+    };
+  }, [isPlaying, spriteStates]);
+  
+  // Collision checking and updating spriteBlocks state.
   const checkCollisionAndSwapSteps = () => {
-    setSpriteStates((prev) => {
-      let updatedStates = { ...prev };
-      sprites.forEach((spriteA) => {
-        sprites.forEach((spriteB) => {
-          if (spriteA.id !== spriteB.id) {
-            const posA = prev[spriteA.id]?.position;
-            const posB = prev[spriteB.id]?.position;
-
-            if (posA && posB) {
-              const distance = Math.hypot(posA.x - posB.x, posA.y - posB.y);
-
-              if (distance <= 60) {
-                const stepA = prev[spriteA.id]?.step || 10;
-                const stepB = prev[spriteB.id]?.step || 10;
-
-                updatedStates[spriteA.id] = { ...updatedStates[spriteA.id], step: stepB };
-                updatedStates[spriteB.id] = { ...updatedStates[spriteB.id], step: stepA };
-
-                console.log(`Collision detected! Swapping steps: ${spriteA.name} <-> ${spriteB.name}`);
+    if (isUpdatingCollision.current) return;
+    isUpdatingCollision.current = true;
+    
+    setSpriteBlocks(prevBlocks => {
+      let newBlocks = { ...prevBlocks };
+      let collisionOccurred = false;
+      const now = Date.now();
+      
+      sprites.forEach(spriteA => {
+        sprites.forEach(spriteB => {
+          if (spriteA.id === spriteB.id) return;
+          // Create a key for this pair in a sorted order to avoid duplicates
+          const pairKey = [spriteA.id, spriteB.id].sort().join("-");
+          
+          // If collision for this pair was handled recently, skip
+          if (collisionCooldownRef.current[pairKey] && (now - collisionCooldownRef.current[pairKey] < COLLISION_COOLDOWN)) {
+            return;
+          }
+          
+          const posA = spriteStates[spriteA.id]?.position;
+          const posB = spriteStates[spriteB.id]?.position;
+          if (posA && posB) {
+            const distance = Math.hypot(posA.x - posB.x, posA.y - posB.y);
+            if (distance <= 60) {
+              // Get the motion blocks for each sprite
+              const blocksA = newBlocks[spriteA.id] || [];
+              const blocksB = newBlocks[spriteB.id] || [];
+              const moveIndexA = blocksA.findIndex(b => b.category === "Motion" && b.text.includes("Move"));
+              const moveIndexB = blocksB.findIndex(b => b.category === "Motion" && b.text.includes("Move"));
+              
+              const stepA = moveIndexA >= 0 ? parseFloat(blocksA[moveIndexA].inputs[0] || "10") : 0;
+              const stepB = moveIndexB >= 0 ? parseFloat(blocksB[moveIndexB].inputs[0] || "10") : 0;
+              
+              if (moveIndexA >= 0 && moveIndexB >= 0) {
+                // Both sprites are moving: swap the steps if they differ.
+                if (stepA !== stepB) {
+                  newBlocks[spriteA.id][moveIndexA].inputs[0] = String(stepB);
+                  newBlocks[spriteB.id][moveIndexB].inputs[0] = String(stepA);
+                  collisionOccurred = true;
+                  // Mark this pair in cooldown.
+                  collisionCooldownRef.current[pairKey] = now;
+                  console.log(`Collision: Swapping steps between ${spriteA.name} and ${spriteB.name}`);
+                }
+              } else if (moveIndexA >= 0 && moveIndexB < 0) {
+                // Sprite A is moving, Sprite B is stationary: transfer movement from A to B.
+                if (stepA !== 0) {
+                  newBlocks[spriteA.id][moveIndexA].inputs[0] = "0";
+                  newBlocks[spriteB.id] = newBlocks[spriteB.id] || [];
+                  newBlocks[spriteB.id].push({
+                    id: `block-${Date.now()}`,
+                    text: "Move ___ steps",
+                    inputTypes: ["number"],
+                    color: "bg-blue-400",
+                    category: "Motion",
+                    inputs: { 0: String(stepA) }
+                  });
+                  collisionOccurred = true;
+                  collisionCooldownRef.current[pairKey] = now;
+                  console.log(`Collision: Transferring steps from ${spriteA.name} to ${spriteB.name}`);
+                }
+              } else if (moveIndexA < 0 && moveIndexB >= 0) {
+                // Sprite B is moving, Sprite A is stationary: transfer movement from B to A.
+                if (stepB !== 0) {
+                  newBlocks[spriteB.id][moveIndexB].inputs[0] = "0";
+                  newBlocks[spriteA.id] = newBlocks[spriteA.id] || [];
+                  newBlocks[spriteA.id].push({
+                    id: `block-${Date.now()}`,
+                    text: "Move ___ steps",
+                    inputTypes: ["number"],
+                    color: "bg-blue-400",
+                    category: "Motion",
+                    inputs: { 0: String(stepB) }
+                  });
+                  collisionOccurred = true;
+                  collisionCooldownRef.current[pairKey] = now;
+                  console.log(`Collision: Transferring steps from ${spriteB.name} to ${spriteA.name}`);
+                }
               }
             }
           }
         });
       });
-      return updatedStates;
+      
+      isUpdatingCollision.current = false;
+      return collisionOccurred ? newBlocks : prevBlocks;
     });
   };
-
-  // Execute blocks when isPlaying changes
+  
+  // Execute sprite blocks concurrently
   useEffect(() => {
     if (!isPlaying) return;
-
-    // Execute blocks for each sprite concurrently
     const executeSprites = async () => {
-      // Create an array of promises to execute all sprites concurrently
-      const spritePromises = sprites.map(sprite => {
-        const blocks = spriteBlocks[sprite.id] || [];
-        return executeBlocksForSprite(sprite, blocks);
-      });
-      
-      // Wait for all sprites to finish their execution
-      await Promise.all(spritePromises);
-
-      checkCollisionAndSwapSteps();
+      await Promise.all(sprites.map(sprite => executeBlocksForSprite(sprite)));
     };
-
     executeSprites();
-  }, [isPlaying, sprites, spriteBlocks]);
-
-  // Function to execute blocks for a specific sprite
-  const executeBlocksForSprite = async (sprite, blocks) => {
-    // Reset messages before execution
+  }, [isPlaying]);
+  
+  // Execute blocks for a sprite using the updated blocksRef
+  const executeBlocksForSprite = async (sprite) => {
     setSpriteStates(prev => ({
       ...prev,
-      [sprite.id]: {
-        ...prev[sprite.id],
-        message: ""
-      }
+      [sprite.id]: { ...prev[sprite.id], message: "" }
     }));
-
-    // Filter blocks with "When ▶️ clicked" as first block
-    const eventBlock = blocks.find(block => block.category === "Event" && block.text.includes("When ▶️ clicked"));
-    if (!eventBlock) return; // Don't execute if no event block
-    
-    // Process blocks in order, handling control flow properly
-    await processBlocks(sprite, blocks, 0);
+    const currentBlocks = blocksRef.current[sprite.id] || [];
+    const eventBlock = currentBlocks.find(b => b.category === "Event" && b.text.includes("When ▶️ clicked"));
+    if (!eventBlock) return;
+    await processBlocks(sprite, 0);
   };
-
-  // Process blocks recursively, handling control flow properly
-  const processBlocks = async (sprite, blocks, startIndex) => {
-    for (let i = startIndex; i < blocks.length; i++) {
-      const block = blocks[i];
-      
-      // Skip the event block
+  
+  // Process blocks sequentially, always reading the latest blocks from blocksRef
+  const processBlocks = async (sprite, startIndex) => {
+    let currentIndex = startIndex;
+    while (true) {
+      const currentBlocks = blocksRef.current[sprite.id] || [];
+      if (currentIndex >= currentBlocks.length) break;
+      const block = currentBlocks[currentIndex];
       if (block.category === "Event" && block.text.includes("When ▶️ clicked")) {
+        currentIndex++;
         continue;
       }
-      
-      // Execute based on category
       if (block.category === "Motion") {
         await executeMotionBlock(sprite, block);
-      } 
-      else if (block.category === "Looks") {
+      } else if (block.category === "Looks") {
         await executeLooksBlock(sprite, block);
-      }
-      else if (block.category === "Control") {
-        if (block.text.includes("Repeat ___ times")) {
-          const inputs = block.inputs || {};
-          const times = parseInt(inputs[0] || "10", 10);
-          
-          // Find the blocks inside the repeat block
-          // In a real implementation, blocks would have parent-child relationships
-          // As a simplification, we'll take the next block after the repeat block
-          const repeatBlockIndex = i;
-          let nextBlockIndex = repeatBlockIndex + 1;
-          
-          // Execute the blocks inside the repeat block multiple times
-          for (let j = 0; j < times; j++) {
-            // Process the next block (and potentially its children)
-            if (nextBlockIndex < blocks.length) {
-              // Execute just the next block in the sequence for the repeat
-              const nextBlock = blocks[nextBlockIndex];
-              
-              if (nextBlock.category === "Motion") {
-                await executeMotionBlock(sprite, nextBlock);
-              } 
-              else if (nextBlock.category === "Looks") {
-                await executeLooksBlock(sprite, nextBlock);
-              }
-            }
-          }
-          
-          // Skip the next block since we already executed it
-          i = nextBlockIndex;
+      } else if (block.category === "Control" && block.text.includes("Repeat ___ times")) {
+        const times = parseInt(block.inputs[0] || "10", 10);
+        currentIndex++;
+        for (let j = 0; j < times; j++) {
+          await processBlocks(sprite, currentIndex);
         }
+        continue;
       }
+      currentIndex++;
     }
   };
-
+  
   // Execute motion blocks
   const executeMotionBlock = async (sprite, block) => {
     const inputs = block.inputs || {};
-    
     if (block.text.includes("Move ___ steps")) {
-      // Get steps from input or default to 10
       const steps = parseFloat(inputs[0] || "10");
-      
-      // Update state using a function to ensure we have the most current state
       setSpriteStates(prev => {
         const currentState = prev[sprite.id];
         if (!currentState) return prev;
-        
         const radians = currentState.rotation * Math.PI / 180;
         const currentPosition = currentState.position;
-        
-        // Calculate new position
         const newX = currentPosition.x + Math.cos(radians) * steps;
-        const newY = currentPosition.y + Math.sin(radians) * steps; // Y is inverted in screen coordinates
-        
-        const updatedStates = {
+        const newY = currentPosition.y + Math.sin(radians) * steps;
+        return {
           ...prev,
           [sprite.id]: {
             ...currentState,
@@ -291,111 +306,69 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
             }
           }
         };
-      
-        // Check for collisions after updating position
-        setTimeout(checkCollisionAndSwapSteps, 0);
-      
-        return updatedStates;
       });
-      
       await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    else if (block.text.includes("Turn ___ degree")) {
-      // Get degree from input or default to 90
+    } else if (block.text.includes("Turn ___ degree")) {
       const degrees = parseFloat(inputs[0] || "90");
-      
       setSpriteStates(prev => {
         const currentState = prev[sprite.id];
         if (!currentState) return prev;
-        
         return {
           ...prev,
-          [sprite.id]: {
-            ...currentState,
-            rotation: currentState.rotation + degrees
-          }
+          [sprite.id]: { ...currentState, rotation: currentState.rotation + degrees }
         };
       });
-      
       await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    else if (block.text.includes("Go to x:")) {
-      // Get x,y coordinates from inputs or default to 0,0
+    } else if (block.text.includes("Go to x:")) {
       const scratchX = parseFloat(inputs[0] || "0");
       const scratchY = parseFloat(inputs[1] || "0");
-      
-      // Convert to screen coordinates (origin at center)
       const screenCoords = toScreenCoords(scratchX, scratchY);
-      
       setSpriteStates(prev => {
         const currentState = prev[sprite.id];
         if (!currentState) return prev;
-        
         return {
           ...prev,
           [sprite.id]: {
             ...currentState,
-            position: {
-              x: screenCoords.x - 30, // Adjust for sprite center
-              y: screenCoords.y - 30  // Adjust for sprite center
-            }
+            position: { x: screenCoords.x - 30, y: screenCoords.y - 30 }
           }
         };
       });
-      
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   };
-
+  
   // Execute looks blocks
   const executeLooksBlock = async (sprite, block) => {
     const inputs = block.inputs || {};
-    
     if (block.text.includes("Say ___")) {
-      // Get message and duration
       let message = "Hello!";
       let duration = 2;
-      
       if (block.text.includes("for ___ sec")) {
         message = inputs[0] || "Hello!";
         duration = parseFloat(inputs[1] || "2");
       }
-      
       setSpriteStates(prev => ({
         ...prev,
-        [sprite.id]: {
-          ...prev[sprite.id],
-          message: message
-        }
+        [sprite.id]: { ...prev[sprite.id], message }
       }));
-      
       await new Promise(resolve => setTimeout(resolve, duration * 1000));
-      
       setSpriteStates(prev => ({
         ...prev,
-        [sprite.id]: {
-          ...prev[sprite.id],
-          message: ""
-        }
+        [sprite.id]: { ...prev[sprite.id], message: "" }
       }));
     }
   };
-
+  
   return (
-    <div 
-      ref={playgroundRef}
-      className="h-full w-full bg-white border-2 border-gray-300 rounded-lg relative"
-    >
-      {/* Coordinate Display */}
+    <div ref={playgroundRef} className="h-full w-full bg-white border-2 border-gray-300 rounded-lg relative">
       <div className="absolute top-2 left-2 text-xs bg-white/75 p-1 rounded">
         {selectedSprite && spriteStates[selectedSprite.id] && (
           <>
-            Selected: {selectedSprite.name} | 
-            x: {toScratchCoords(
+            Selected: {selectedSprite.name} | x: {toScratchCoords(
               spriteStates[selectedSprite.id].position.x + 30, 
               spriteStates[selectedSprite.id].position.y + 30
-            ).x}, 
-            y: {toScratchCoords(
+            ).x}, y: {toScratchCoords(
               spriteStates[selectedSprite.id].position.x + 30, 
               spriteStates[selectedSprite.id].position.y + 30
             ).y}
@@ -403,11 +376,9 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
         )}
       </div>
       
-      {/* Render all sprites */}
       {sprites.map(sprite => {
         const spriteState = spriteStates[sprite.id];
         if (!spriteState) return null;
-        
         return (
           <div
             key={sprite.id}
@@ -420,22 +391,12 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
               height: "70px",
               zIndex: 10,
               display: spriteState.isVisible ? 'block' : 'none',
-              // Highlight selected sprite
-              
-              transition: isDragging && draggedSprite?.id === sprite.id ? 'none' : 'all 0.1s ease',
+              transition: isDragging && draggedSprite?.id === sprite.id ? 'none' : 'all 0.1s ease'
             }}
             onMouseDown={(e) => handleMouseDown(e, sprite)}
             onClick={() => selectedSprite?.id === sprite.id && onPlay()}
           >
-            {/* Render sprite image */}
-            <img 
-              src={sprite.src} 
-              alt={sprite.name}
-              className="w-full h-full object-contain pointer-events-none"
-              draggable="false"
-            />
-
-            {/* Speech bubble for messages */}
+            <img src={sprite.src} alt={sprite.name} className="w-full h-full object-contain pointer-events-none" draggable="false" />
             {spriteState.message && (
               <div className="absolute top-0 right-0 transform translate-x-full -translate-y-full bg-white p-2 rounded-lg border border-gray-300 whitespace-nowrap z-20">
                 {spriteState.message}

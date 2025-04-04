@@ -96,8 +96,7 @@ function Sidebar({ categories: propCategories }) {
                 currentCategory.content.map((item, blockIndex) => {
                   const parts = item.text.split("___");
                   const inputTypes = item.inputTypes || [];
-                  console.log(selectedCategory)
-                  console.log("sidebar-"+selectedCategory+"-"+blockIndex)
+                  
                   return (
                     <Draggable
                       key={blockIndex}

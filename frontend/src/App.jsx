@@ -7,6 +7,7 @@ import Sidebar from "./sections/Sidebar";
 import SpriteControl from "./sections/SpriteControl";
 import { DragDropContext } from "react-beautiful-dnd";
 import CatSprite from "./assets/cat.svg";
+
 // Moved categories list so that both Sidebar and App can use it.
 export const categories = [
   { 
@@ -165,7 +166,8 @@ function App() {
               selectedSprite={selectedSprite}
               spriteBlocks={spriteBlocks} 
               isPlaying={isPlaying} 
-              onPlay={handlePlay} 
+              onPlay={handlePlay}
+              setSpriteBlocks={setSpriteBlocks}  
             />
             <SpriteControl 
               sprites={sprites}
