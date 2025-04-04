@@ -13,6 +13,7 @@ export default function Navbar({ onPlay }) {
       >
         ▶️
       </button>
+      <a href="https://github.com/Om-Govindani/Juspay-Assignment"><img src="https://img.icons8.com/?size=100&id=12599&format=png&color=000000" className="w-[45px] h-[38px]" /></a>
     </div>
   )
 }
