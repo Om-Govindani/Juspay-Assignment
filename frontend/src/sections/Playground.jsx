@@ -116,6 +116,60 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
     };
   };
   
+
+  useEffect(() => {
+    if (!playgroundRef.current) return;
+
+    const { clientWidth, clientHeight } = playgroundRef.current;
+    setPlaygroundDimensions({ width: clientWidth, height: clientHeight });
+
+    setSpriteStates((prev) => {
+      const newState = { ...prev };
+      sprites.forEach((sprite) => {
+        if (!newState[sprite.id]) {
+          newState[sprite.id] = {
+            position: { x: clientWidth / 2 - 30, y: clientHeight / 2 - 30 },
+            rotation: 0,
+            message: "",
+            isVisible: true,
+            step: sprite.step || 10,
+          };
+        }
+      });
+      return newState;
+    });
+  }, [sprites, playgroundRef.current]);
+
+  // Check collision and swap steps
+  const checkCollisionAndSwapSteps = () => {
+    setSpriteStates((prev) => {
+      let updatedStates = { ...prev };
+      sprites.forEach((spriteA) => {
+        sprites.forEach((spriteB) => {
+          if (spriteA.id !== spriteB.id) {
+            const posA = prev[spriteA.id]?.position;
+            const posB = prev[spriteB.id]?.position;
+
+            if (posA && posB) {
+              const distance = Math.hypot(posA.x - posB.x, posA.y - posB.y);
+
+              if (distance <= 60) {
+                const stepA = prev[spriteA.id]?.step || 10;
+                const stepB = prev[spriteB.id]?.step || 10;
+
+                updatedStates[spriteA.id] = { ...updatedStates[spriteA.id], step: stepB };
+                updatedStates[spriteB.id] = { ...updatedStates[spriteB.id], step: stepA };
+
+                console.log(`Collision detected! Swapping steps: ${spriteA.name} <-> ${spriteB.name}`);
+              }
+            }
+          }
+        });
+      });
+      return updatedStates;
+    });
+  };
+
   // Execute blocks when isPlaying changes
   useEffect(() => {
     if (!isPlaying) return;
@@ -130,6 +184,8 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
       
       // Wait for all sprites to finish their execution
       await Promise.all(spritePromises);
+
+      checkCollisionAndSwapSteps();
     };
 
     executeSprites();
@@ -225,8 +281,7 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
         const newX = currentPosition.x + Math.cos(radians) * steps;
         const newY = currentPosition.y + Math.sin(radians) * steps; // Y is inverted in screen coordinates
         
-        // Ensure the sprite stays within playground boundaries
-        return {
+        const updatedStates = {
           ...prev,
           [sprite.id]: {
             ...currentState,
@@ -236,6 +291,11 @@ function Playground({ sprites, selectedSprite, spriteBlocks, isPlaying, onPlay }
             }
           }
         };
+      
+        // Check for collisions after updating position
+        setTimeout(checkCollisionAndSwapSteps, 0);
+      
+        return updatedStates;
       });
       
       await new Promise(resolve => setTimeout(resolve, 500));
